@@ -1,13 +1,567 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Contacto UPATECO - Trabajo Práctico React</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-  </head>
-  <body class="bg-slate-50">
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contacto UPATECO - Trabajo Práctico React + EmailJS</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <!-- Librería React 18 y ReactDOM 18 desde CDN oficial -->
+  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <!-- Babel para ejecutar JSX directamente en el navegador -->
+  <script src="https://unpkg.com/@babel/standalone@7.26.2/babel.min.js"></script>
+  <!-- SDK Oficial de EmailJS (@emailjs/browser) -->
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4.4.1/dist/email.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef } = React;
+
+    const SEDES_UPATECO = [
+      {
+        id: 'salta-capital',
+        nombre: 'Sede Central B° Pereyra Rozas (Salta Capital)',
+        direccion: 'Ciudad Educativa Av. Constitución Nacional s/n PB, Ingreso B° Pereyra Rozas, A4400 Salta',
+        lat: -24.74354,
+        lng: -65.4058,
+        telefono: '+(54) 3875-569961',
+        email: 'consultas@upateco.edu.ar',
+        horario: 'Lunes a Viernes: 8:00 a 18:00 hs',
+        descripcion: 'Edificio de la Ciudad Educativa con aulas presenciales, SUM para 100 personas, sala de informática con 73 puestos y área administrativa.',
+        webUrl: 'https://upateco.edu.ar/contacto/',
+        googleMapsUrl: 'https://www.google.com/maps/search/?api=1&query=-24.74354,-65.4058'
+      },
+      {
+        id: 'sede-tartagal',
+        nombre: 'Sede Tartagal – Extensión Universitaria',
+        direccion: 'Centro Cultural de los Pueblos Originarios, Centro, Tartagal, Salta',
+        lat: -22.5194,
+        lng: -63.7986,
+        telefono: '+(54) 3875-569961',
+        email: 'consultas@upateco.edu.ar',
+        horario: 'Lunes a Viernes: 8:00 a 18:00 hs',
+        descripcion: 'Espacio de capacitación en nuevas tecnologías y economía del conocimiento equipado con computadoras de última generación en Tartagal.',
+        webUrl: 'https://upateco.edu.ar/sede-tartagal/',
+        googleMapsUrl: 'https://www.google.com/maps/search/?api=1&query=-22.5194,-63.7986'
+      }
+    ];
+
+    const CARRERAS = [
+      'Tecnicatura Universitaria en Programación / Desarrollo de Aplicaciones',
+      'Tecnicatura Universitaria en Administración y Gestión de PyMEs',
+      'Cursos de Tecnologías y Economía del Conocimiento',
+      'Cursos de Oficios y Formación Profesional',
+      'Consulta Administrativa General'
+    ];
+
+    function App() {
+      const formRef = useRef(null);
+      const [selectedSedeId, setSelectedSedeId] = useState('salta-capital');
+      const [zoomLevel, setZoomLevel] = useState(15);
+      const [showModal, setShowModal] = useState(false);
+
+      // Credenciales de EmailJS configurables desde la interfaz o en el código
+      const [config, setConfig] = useState({
+        serviceId: 'service_km76mdh',
+        templateId: 'template_iec0lmq',
+        publicKey: 'UvTrcUogSEi2kAF8O'
+      });
+
+      const [formData, setFormData] = useState({
+        user_name: '',
+        user_email: '',
+        user_phone: '',
+        sede_interes: SEDES_UPATECO[0].nombre,
+        subject: CARRERAS[0],
+        message: ''
+      });
+
+      const [status, setStatus] = useState({ sending: false, type: null, msg: '' });
+      const [history, setHistory] = useState([]);
+
+      const currentSede = SEDES_UPATECO.find(s => s.id === selectedSedeId) || SEDES_UPATECO[0];
+      const hasCredentials = config.serviceId.trim() && config.templateId.trim() && config.publicKey.trim();
+
+      const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+      };
+
+      const handleSedeSwitch = (id) => {
+        setSelectedSedeId(id);
+        const found = SEDES_UPATECO.find(s => s.id === id);
+        if (found) setFormData(prev => ({ ...prev, sede_interes: found.nombre }));
+      };
+
+      const handleAutoFill = () => {
+        setFormData({
+          user_name: 'Estudiante UPATECO',
+          user_email: 'estudiante@upateco.edu.ar',
+          user_phone: '+54 387 512-3456',
+          sede_interes: currentSede.nombre,
+          subject: CARRERAS[0],
+          message: 'Hola, envío este mensaje de prueba desde mi sitio web en React con EmailJS para consultar sobre las inscripciones en UPATECO.'
+        });
+        setStatus({ sending: false, type: null, msg: '' });
+      };
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!formData.user_name.trim() || !formData.user_email.trim() || !formData.message.trim()) {
+          setStatus({ sending: false, type: 'error', msg: 'Por favor completá todos los campos obligatorios (*).' });
+          return;
+        }
+
+        setStatus({ sending: true, type: null, msg: 'Enviando mensaje a través de EmailJS...' });
+        const hora = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+        if (hasCredentials && window.emailjs) {
+          try {
+            await window.emailjs.send(
+              config.serviceId.trim(),
+              config.templateId.trim(),
+              {
+                name: formData.user_name,
+                user_name: formData.user_name,
+                from_name: formData.user_name,
+                email: formData.user_email,
+                user_email: formData.user_email,
+                reply_to: formData.user_email,
+                user_phone: formData.user_phone || 'No especificado',
+                sede_interes: formData.sede_interes,
+                title: formData.subject,
+                subject: formData.subject,
+                message: formData.message
+              },
+              { publicKey: config.publicKey.trim() }
+            );
+            setStatus({
+              sending: false,
+              type: 'success',
+              msg: '¡Mensaje enviado con éxito a tu correo electrónico mediante EmailJS!'
+            });
+            setHistory(prev => [{ id: Date.now(), ...formData, hora }, ...prev]);
+            setFormData(prev => ({ ...prev, user_name: '', user_email: '', user_phone: '', message: '' }));
+          } catch (err) {
+            setStatus({
+              sending: false,
+              type: 'error',
+              msg: 'Error al enviar con EmailJS: verificá tu Service ID, Template ID y Public Key.'
+            });
+          }
+        } else {
+          setTimeout(() => {
+            setStatus({
+              sending: false,
+              type: 'simulated',
+              msg: '¡Mensaje procesado correctamente! (Para recibirlo en tu bandeja real, cargá tu Service ID, Template ID y Public Key en el botón "Configurar EmailJS").'
+            });
+            setHistory(prev => [{ id: Date.now(), ...formData, hora }, ...prev]);
+            setFormData(prev => ({ ...prev, user_name: '', user_email: '', user_phone: '', message: '' }));
+          }, 800);
+        }
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col bg-slate-50">
+          {/* Barra de navegación */}
+          <header className="bg-gradient-to-r from-blue-950 via-blue-900 to-indigo-950 text-white shadow-lg sticky top-0 z-30">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-300 font-extrabold text-lg">
+                  U
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold tracking-wider text-lg">UPATECO</span>
+                    <span className="text-[11px] font-semibold uppercase px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                      React + EmailJS
+                    </span>
+                  </div>
+                  <p className="text-xs text-blue-200">
+                    Universidad Provincial de Administración, Tecnología y Oficios · Salta
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleAutoFill}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-800/70 hover:bg-blue-800 text-blue-100 border border-blue-700 transition"
+                >
+                  Autocompletar Prueba
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowModal(true)}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 transition shadow-sm"
+                >
+                  Configurar EmailJS
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {/* Encabezado Principal */}
+          <section className="bg-gradient-to-b from-blue-900 to-slate-900 text-white py-9 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+              <div className="max-w-2xl">
+                <span className="inline-block text-xs font-bold uppercase tracking-widest text-amber-400 mb-2">
+                  Portal Universitario de Contacto
+                </span>
+                <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
+                  Comunicate con la Universidad <span className="text-amber-400">UPATECO</span>
+                </h1>
+                <p className="mt-2 text-sm sm:text-base text-slate-300">
+                  Enviá tu consulta directamente por correo electrónico mediante <strong>EmailJS</strong> y consultá la ubicación de nuestras sedes en el mapa interactivo.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="bg-white/10 border border-white/15 rounded-xl p-3.5">
+                  <p className="text-blue-200 font-medium">Teléfono Administración</p>
+                  <p className="text-sm font-bold text-white mt-0.5">+(54) 3875-569961</p>
+                  <p className="text-slate-300 mt-0.5">Sede Balcarce: 387-6092728</p>
+                </div>
+                <div className="bg-white/10 border border-white/15 rounded-xl p-3.5">
+                  <p className="text-blue-200 font-medium">Horarios y Correo</p>
+                  <p className="text-sm font-bold text-white mt-0.5">Lun a Vie: 8:00 a 18:00 hs</p>
+                  <p className="text-slate-300 mt-0.5">consultas@upateco.edu.ar</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Contenido Principal: Formulario (Izquierda) + Mapa UPATECO (Derecha) */}
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+              
+              {/* COLUMNA IZQUIERDA: FORMULARIO DE CONTACTO EMAILJS */}
+              <div className="lg:col-span-6 bg-white rounded-2xl shadow-md border border-slate-200 p-6 sm:p-8 flex flex-col justify-between">
+                <div>
+                  <div className="border-b border-slate-100 pb-4 mb-6 flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold uppercase tracking-wider text-blue-700">
+                        Servicio EmailJS
+                      </span>
+                      <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-0.5">
+                        Formulario de Contacto
+                      </h2>
+                    </div>
+                    <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${hasCredentials ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                      {hasCredentials ? 'EmailJS Conectado' : 'Modo Demo Activo'}
+                    </span>
+                  </div>
+
+                  <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="user_name" className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                          Nombre y Apellido <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          id="user_name"
+                          name="user_name"
+                          type="text"
+                          required
+                          value={formData.user_name}
+                          onChange={handleChange}
+                          placeholder="Tu nombre completo"
+                          className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-sm focus:border-blue-600 focus:bg-white focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="user_email" className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                          Correo Electrónico <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          id="user_email"
+                          name="user_email"
+                          type="email"
+                          required
+                          value={formData.user_email}
+                          onChange={handleChange}
+                          placeholder="ejemplo@correo.com"
+                          className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-sm focus:border-blue-600 focus:bg-white focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="user_phone" className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                          Teléfono (Opcional)
+                        </label>
+                        <input
+                          id="user_phone"
+                          name="user_phone"
+                          type="tel"
+                          value={formData.user_phone}
+                          onChange={handleChange}
+                          placeholder="+54 387 500-0000"
+                          className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-sm focus:border-blue-600 focus:bg-white focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="sede_interes" className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                          Sede UPATECO
+                        </label>
+                        <select
+                          id="sede_interes"
+                          name="sede_interes"
+                          value={formData.sede_interes}
+                          onChange={(e) => {
+                            handleChange(e);
+                            const s = SEDES_UPATECO.find(item => item.nombre === e.target.value);
+                            if (s) setSelectedSedeId(s.id);
+                          }}
+                          className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-sm focus:border-blue-600 focus:bg-white focus:outline-none"
+                        >
+                          {SEDES_UPATECO.map(s => (
+                            <option key={s.id} value={s.nombre}>{s.nombre}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="subject" className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Carrera o Motivo de Consulta
+                      </label>
+                      <select
+                        id="subject"
+                        name="subject"
+                        value={formData.subject}
+                        onChange={handleChange}
+                        className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-sm focus:border-blue-600 focus:bg-white focus:outline-none"
+                      >
+                        {CARRERAS.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label htmlFor="message" className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Mensaje <span className="text-rose-500">*</span>
+                      </label>
+                      <textarea
+                        id="message"
+                        name="message"
+                        rows="4"
+                        required
+                        value={formData.message}
+                        onChange={handleChange}
+                        placeholder="Escribí tu consulta aquí..."
+                        className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-sm focus:border-blue-600 focus:bg-white focus:outline-none"
+                      ></textarea>
+                    </div>
+
+                    {status.msg && (
+                      <div className={`p-3.5 rounded-xl border text-xs font-medium ${
+                        status.type === 'error'
+                          ? 'bg-rose-50 border-rose-200 text-rose-800'
+                          : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      }`}>
+                        {status.msg}
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={status.sending}
+                      className="w-full py-3 px-5 rounded-xl bg-blue-900 hover:bg-blue-800 text-white font-bold text-sm shadow-md transition cursor-pointer"
+                    >
+                      {status.sending ? 'Enviando...' : 'Enviar Mensaje por EmailJS'}
+                    </button>
+                  </form>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>Potenciado por @emailjs/browser</span>
+                  <span>Envíos en esta sesión: {history.length}</span>
+                </div>
+              </div>
+
+              {/* COLUMNA DERECHA: MAPA EMBEBIDO DE LA UNIVERSIDAD UPATECO */}
+              <div className="lg:col-span-6 bg-white rounded-2xl shadow-md border border-slate-200 p-6 sm:p-8 flex flex-col justify-between">
+                <div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4 mb-5">
+                    <div>
+                      <span className="text-xs font-bold uppercase tracking-wider text-amber-600">
+                        Ubicación en el Mapa
+                      </span>
+                      <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-0.5">
+                        Universidad UPATECO
+                      </h2>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl self-start">
+                      <button
+                        type="button"
+                        onClick={() => handleSedeSwitch('salta-capital')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                          selectedSedeId === 'salta-capital'
+                            ? 'bg-blue-900 text-white shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Sede Central (Salta)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSedeSwitch('sede-tartagal')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                          selectedSedeId === 'sede-tartagal'
+                            ? 'bg-blue-900 text-white shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Sede Tartagal
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Mapa embebido de Google Maps */}
+                  <div className="relative rounded-2xl overflow-hidden border border-slate-300 bg-slate-100 h-80 sm:h-96 shadow-inner">
+                    <iframe
+                      key={`${currentSede.id}-${zoomLevel}`}
+                      title={`Mapa ${currentSede.nombre}`}
+                      src={`https://maps.google.com/maps?q=${currentSede.lat},${currentSede.lng}&z=${zoomLevel}&output=embed`}
+                      className="w-full h-full border-0"
+                      allowFullScreen
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                    ></iframe>
+
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2 pointer-events-none">
+                      <div className="pointer-events-auto bg-slate-900/90 text-white px-3 py-1.5 rounded-xl text-xs font-medium shadow">
+                        GPS: {currentSede.lat}, {currentSede.lng}
+                      </div>
+                      <div className="pointer-events-auto flex items-center gap-1 bg-white/95 p-1 rounded-xl shadow border border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => setZoomLevel(z => Math.max(11, z - 1))}
+                          className="px-2 py-1 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded"
+                        >
+                          − Zoom
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setZoomLevel(z => Math.min(18, z + 1))}
+                          className="px-2 py-1 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded"
+                        >
+                          + Zoom
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Información de la sede */}
+                  <div className="mt-5 bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">{currentSede.nombre}</h3>
+                        <p className="text-xs text-slate-600 mt-0.5">{currentSede.direccion}</p>
+                      </div>
+                      <a
+                        href={currentSede.googleMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 px-3 py-1.5 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-900 text-xs font-bold"
+                      >
+                        Abrir en Google Maps
+                      </a>
+                    </div>
+                    <p className="text-xs text-slate-600 pt-2 border-t border-slate-200">
+                      {currentSede.descripcion}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>Sitio Oficial: <a href="https://upateco.edu.ar/" target="_blank" rel="noopener noreferrer" className="text-blue-700 underline font-semibold">upateco.edu.ar</a></span>
+                  <span>Salta, Argentina</span>
+                </div>
+              </div>
+
+            </div>
+          </main>
+
+          {/* Modal para cargar las claves de EmailJS */}
+          {showModal && (
+            <div className="fixed inset-0 z-50 bg-slate-950/60 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="text-base font-extrabold text-slate-900">Configurar Claves de EmailJS</h3>
+                  <button type="button" onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-700 font-bold">✕</button>
+                </div>
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-700 uppercase mb-1">Service ID</label>
+                    <input
+                      type="text"
+                      value={config.serviceId}
+                      onChange={e => setConfig(p => ({ ...p, serviceId: e.target.value }))}
+                      placeholder="Ej. service_xxx"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 uppercase mb-1">Template ID</label>
+                    <input
+                      type="text"
+                      value={config.templateId}
+                      onChange={e => setConfig(p => ({ ...p, templateId: e.target.value }))}
+                      placeholder="Ej. template_xxx"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 uppercase mb-1">Public Key</label>
+                    <input
+                      type="text"
+                      value={config.publicKey}
+                      onChange={e => setConfig(p => ({ ...p, publicKey: e.target.value }))}
+                      placeholder="Ej. aBcDeFgHiJkLmN"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="px-4 py-2 rounded-xl bg-blue-900 text-white text-xs font-bold"
+                  >
+                    Guardar Configuración
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <footer className="bg-slate-900 text-slate-400 text-xs py-4 px-4 text-center border-t border-slate-800">
+            Trabajo Práctico React + EmailJS · Universidad Provincial de Administración, Tecnología y Oficios (UPATECO)
+          </footer>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
 </html>
